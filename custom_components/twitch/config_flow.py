@@ -2,8 +2,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
+from homeassistant.config_entries import ConfigEntry, OptionsFlow
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_TOKEN
+from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    AbstractOAuth2FlowHandler,
+    async_get_config_entry_implementation,
+)
 from twitchAPI.twitch import (
     Twitch,
     TwitchAPIException,
@@ -11,22 +22,12 @@ from twitchAPI.twitch import (
     TwitchBackendException,
     TwitchUser,
 )
-import voluptuous as vol
-
-from homeassistant import config_entries
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_TOKEN
-from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_entry_oauth2_flow
-import homeassistant.helpers.config_validation as cv
 
 from .const import CONF_CHANNELS, CONF_REFRESH_TOKEN, DOMAIN, OAUTH_SCOPES
 from .coordinator import get_followed_channels, get_user
 
 
-class OAuth2FlowHandler(
-    config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN
-):
+class OAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
     """Config flow to handle Twitch OAuth2 authentication."""
 
     DOMAIN = DOMAIN
@@ -132,19 +133,35 @@ class OAuth2FlowHandler(
             options={CONF_CHANNELS: user_input[CONF_CHANNELS]},
         )
 
+    async def async_step_reauth(
+        self,
+        entry_data: Mapping[str, Any],
+    ) -> FlowResult:
+        """Perform reauth upon an API authentication error."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Confirm reauth dialog."""
+        if user_input is None:
+            return self.async_show_form(step_id="reauth_confirm")
+        return await self.async_step_user()
+
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        config_entry: ConfigEntry,
     ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
         return OptionsFlowHandler(config_entry)
 
 
-class OptionsFlowHandler(config_entries.OptionsFlow):
+class OptionsFlowHandler(OptionsFlow):
     """Handle a option flow for GitHub."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
 
@@ -166,10 +183,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Handle channels options flow."""
         if not user_input:
-            implementation = (
-                await config_entry_oauth2_flow.async_get_config_entry_implementation(
-                    self.hass, self.config_entry
-                )
+            implementation = await async_get_config_entry_implementation(
+                self.hass,
+                self.config_entry,
             )
 
             configured_channels: list[str] = self.config_entry.options[CONF_CHANNELS]
