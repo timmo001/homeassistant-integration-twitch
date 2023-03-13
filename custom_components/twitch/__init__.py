@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import logging
 
-from twitchAPI.twitch import Twitch
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.config_entry_oauth2_flow import (
     OAuth2Session,
@@ -16,6 +15,13 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from twitchAPI.twitch import Twitch
+from twitchAPI.types import (
+    MissingScopeException,
+    TwitchAPIException,
+    TwitchAuthorizationException,
+    TwitchBackendException,
+)
 
 from .const import CONF_CHANNELS, CONF_REFRESH_TOKEN, DOMAIN, OAUTH_SCOPES
 from .coordinator import TwitchUpdateCoordinator
@@ -41,12 +47,17 @@ async def async_setup_entry(
     )
     client.auto_refresh_auth = False
 
-    await client.set_user_authentication(
-        entry.data[CONF_TOKEN][CONF_ACCESS_TOKEN],
-        OAUTH_SCOPES,
-        refresh_token=entry.data[CONF_TOKEN][CONF_REFRESH_TOKEN],
-        validate=True,
-    )
+    try:
+        await client.set_user_authentication(
+            entry.data[CONF_TOKEN][CONF_ACCESS_TOKEN],
+            OAUTH_SCOPES,
+            refresh_token=entry.data[CONF_TOKEN][CONF_REFRESH_TOKEN],
+            validate=True,
+        )
+    except (TwitchAuthorizationException, MissingScopeException) as ex:
+        raise ConfigEntryAuthFailed from ex
+    except (TwitchAPIException, TwitchBackendException) as ex:
+        raise ConfigEntryNotReady from ex
 
     coordinator = TwitchUpdateCoordinator(
         hass,
