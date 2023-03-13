@@ -9,80 +9,19 @@ from twitchAPI.twitch import (
     TwitchAPIException,
     TwitchAuthorizationException,
     TwitchBackendException,
+    TwitchUser,
 )
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_TOKEN
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_entry_oauth2_flow
 import homeassistant.helpers.config_validation as cv
 
 from .const import CONF_CHANNELS, CONF_REFRESH_TOKEN, DOMAIN, OAUTH_SCOPES
-from .data import TwitchFollower, TwitchResponse, TwitchResponsePagination, TwitchUser
-
-
-async def get_user(
-    hass: HomeAssistant,
-    client: Twitch,
-) -> TwitchUser | None:
-    """Return the username of the user."""
-    users_response = TwitchResponse(
-        **await hass.async_add_executor_job(client.get_users)
-    )
-
-    if users_response.data is not None:
-        return TwitchUser(**users_response.data[0])
-    return None
-
-
-async def get_followed_channels(
-    hass: HomeAssistant,
-    client: Twitch,
-    user: TwitchUser,
-) -> list[TwitchFollower]:
-    """Return a list of channels the user is following."""
-    cursor = None
-    channels: list[TwitchFollower] = [
-        TwitchFollower(
-            from_id=user.id,
-            from_login=user.login,
-            from_name=user.display_name,
-            to_id=user.id,
-            to_login=user.login,
-            to_name=user.display_name,
-            followed_at=user.created_at,
-        ),
-    ]
-    while True:
-        followers_response = TwitchResponse(
-            **await hass.async_add_executor_job(
-                client.get_users_follows,
-                cursor,
-                100,
-                user.id,
-            )
-        )
-
-        if followers_response.data is not None:
-            channels.extend(
-                [TwitchFollower(**follower) for follower in followers_response.data]
-            )
-        if (
-            followers_response.pagination is not None
-            and followers_response.pagination != {}
-        ):
-            cursor = TwitchResponsePagination(**followers_response.pagination).cursor
-        else:
-            cursor = None
-            break
-
-    return sorted(
-        channels,
-        key=lambda channel: channel.to_name.lower(),
-        reverse=False,
-    )
+from .coordinator import get_followed_channels, get_user
 
 
 class OAuth2FlowHandler(
@@ -106,7 +45,7 @@ class OAuth2FlowHandler(
     @property
     def extra_authorize_data(self) -> dict[str, Any]:
         """Extra data that needs to be appended to the authorize url."""
-        return {"scope": ",".join([scope.value for scope in OAUTH_SCOPES])}
+        return {"scope": " ".join([scope.value for scope in OAUTH_SCOPES])}
 
     async def async_oauth_create_entry(
         self,
@@ -123,16 +62,14 @@ class OAuth2FlowHandler(
         self._client = Twitch(
             app_id=client_id,
             authenticate_app=False,
-            target_app_auth_scope=OAUTH_SCOPES,
         )
         self._client.auto_refresh_auth = False
 
-        await self.hass.async_add_executor_job(
-            self._client.set_user_authentication,
+        await self._client.set_user_authentication(
             access_token,
             OAUTH_SCOPES,
-            refresh_token,
-            True,
+            refresh_token=refresh_token,
+            validate=True,
         )
 
         self._oauth_data = data
@@ -149,7 +86,7 @@ class OAuth2FlowHandler(
             return self.async_abort(reason="cannot_connect")
 
         try:
-            user = await get_user(self.hass, self._client)
+            user = await get_user(self._client)
         except TwitchAuthorizationException as err:
             self.logger.error("Authorization error: %s", err)
             return self.async_abort(reason="invalid_auth")
@@ -166,7 +103,6 @@ class OAuth2FlowHandler(
         if not user_input:
             try:
                 channels = await get_followed_channels(
-                    self.hass,
                     self._client,
                     user,
                 )
@@ -181,7 +117,10 @@ class OAuth2FlowHandler(
                 data_schema=vol.Schema(
                     {
                         vol.Required(CONF_CHANNELS): cv.multi_select(
-                            {channel.to_id: channel.to_name for channel in channels}
+                            {
+                                channel.broadcaster_id: channel.broadcaster_name
+                                for channel in channels
+                            }
                         ),
                     }
                 ),
@@ -242,21 +181,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             client = Twitch(
                 app_id=client_id,
                 authenticate_app=False,
-                target_app_auth_scope=OAUTH_SCOPES,
             )
             client.auto_refresh_auth = False
 
-            await self.hass.async_add_executor_job(
-                client.set_user_authentication,
+            await client.set_user_authentication(
                 access_token,
                 OAUTH_SCOPES,
-                refresh_token,
-                True,
+                refresh_token=refresh_token,
+                validate=True,
             )
 
             try:
                 channels = await get_followed_channels(
-                    self.hass,
                     client,
                     TwitchUser(**self.config_entry.data["user"]),
                 )
@@ -267,8 +203,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 self.logger.error("Twitch API error: %s", err)
                 return self.async_abort(reason="cannot_connect")
 
-            channel_ids = [channel.to_id for channel in channels]
-            channels_dict = {channel.to_id: channel.to_name for channel in channels}
+            channel_ids = [channel.broadcaster_id for channel in channels]
+            channels_dict = {
+                channel.broadcaster_id: channel.broadcaster_name for channel in channels
+            }
 
             self.logger.debug("Channels: %s", channels_dict)
 

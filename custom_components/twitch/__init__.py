@@ -35,23 +35,17 @@ async def async_setup_entry(
 
     await session.async_ensure_token_valid()
 
-    client_id = implementation.__dict__[CONF_CLIENT_ID]
-    access_token = entry.data[CONF_TOKEN][CONF_ACCESS_TOKEN]
-    refresh_token = entry.data[CONF_TOKEN][CONF_REFRESH_TOKEN]
-
-    client = Twitch(
-        app_id=client_id,
+    client = await Twitch(
+        app_id=implementation.__dict__[CONF_CLIENT_ID],
         authenticate_app=False,
-        target_app_auth_scope=OAUTH_SCOPES,
     )
     client.auto_refresh_auth = False
 
-    await hass.async_add_executor_job(
-        client.set_user_authentication,
-        access_token,
+    await client.set_user_authentication(
+        entry.data[CONF_TOKEN][CONF_ACCESS_TOKEN],
         OAUTH_SCOPES,
-        refresh_token,
-        True,
+        refresh_token=entry.data[CONF_TOKEN][CONF_REFRESH_TOKEN],
+        validate=True,
     )
 
     coordinator = TwitchUpdateCoordinator(

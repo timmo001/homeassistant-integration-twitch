@@ -7,11 +7,14 @@ import logging
 from typing import Any
 
 import async_timeout
+from twitchAPI.helper import first
 from twitchAPI.twitch import (
+    FollowedChannel,
     Twitch,
     TwitchAPIException,
     TwitchAuthorizationException,
     TwitchBackendException,
+    TwitchUser,
 )
 
 from homeassistant.core import HomeAssistant
@@ -19,15 +22,33 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_CHANNELS, DOMAIN
-from .data import (
-    TwitchChannel,
-    TwitchCoordinatorData,
-    TwitchFollower,
-    TwitchResponse,
-    TwitchStream,
-    TwitchSubscription,
-    TwitchUser,
-)
+from .data import TwitchChannel, TwitchCoordinatorData
+
+
+async def get_user(
+    client: Twitch,
+) -> TwitchUser | None:
+    """Return the username of the user."""
+    return await first(client.get_users())
+
+
+async def get_followed_channels(
+    client: Twitch,
+    user: TwitchUser,
+) -> list[FollowedChannel]:
+    """Return a list of channels the user is following."""
+    channels: list[FollowedChannel] = [
+        channel
+        async for channel in await client.get_followed_channels(
+            user_id=user.id,
+        )
+    ]
+
+    return sorted(
+        channels,
+        key=lambda channel: channel.broadcaster_name.lower(),
+        reverse=False,
+    )
 
 
 class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
@@ -52,57 +73,44 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
         self._client = client
         self._options = options
 
-    def _async_get_data_threaded(self) -> TwitchCoordinatorData:
+    async def _async_get_data(self) -> TwitchCoordinatorData:
         """Return data from the coordinator."""
-        user_response = TwitchResponse(**self._client.get_users())
-        if user_response.data is None or len(user_response.data) < 1:
-            raise TwitchAPIException("Invalid user response from twitch")
-
-        user = TwitchUser(**user_response.data[0])
+        user = await get_user(self._client)
+        if user is None:
+            raise UpdateFailed("Cannot get user from Twitch API")
 
         channels = []
-        channels_response = TwitchResponse(
-            **(self._client.get_users(user_ids=self._options[CONF_CHANNELS]))
-        )
-
-        if channels_response.data is not None and len(channels_response.data) > 0:
-            for channel in [
-                TwitchChannel(**channel) for channel in channels_response.data
-            ]:
-                subscriptions_response = TwitchResponse(
-                    **self._client.check_user_subscription(
-                        user_id=user.id, broadcaster_id=channel.id
-                    )
+        async for channel_user in self._client.get_users(
+            user_ids=self._options[CONF_CHANNELS],
+        ):
+            followers = await self._client.get_users_follows(
+                to_id=channel_user.id,
+            )
+            following = await self._client.get_users_follows(
+                from_id=user.id,
+                to_id=channel_user.id,
+            )
+            stream = await first(
+                self._client.get_streams(
+                    user_id=[channel_user.id],
                 )
-                if (
-                    subscriptions_response.data is not None
-                    and len(subscriptions_response.data) > 0
-                ):
-                    channel.subscription = TwitchSubscription(
-                        **subscriptions_response.data[0]
-                    )
+            )
+            subscription = await self._client.check_user_subscription(
+                broadcaster_id=channel_user.id,
+                user_id=user.id,
+            )
 
-                followers_response = TwitchResponse(
-                    **self._client.get_users_follows(to_id=channel.id)
+            channels.append(
+                TwitchChannel(
+                    id=channel_user.id,
+                    display_name=channel_user.display_name,
+                    profile_image_url=channel_user.profile_image_url,
+                    followers=followers.total,
+                    following=following.data[0],
+                    stream=stream,
+                    subscription=subscription,
                 )
-                channel.followers = followers_response.total
-
-                follower_response = TwitchResponse(
-                    **self._client.get_users_follows(from_id=user.id, to_id=channel.id)
-                )
-                if (
-                    follower_response.data is not None
-                    and len(follower_response.data) > 0
-                ):
-                    channel.following = TwitchFollower(**follower_response.data[0])
-
-                streams_response = TwitchResponse(
-                    **self._client.get_streams(user_id=[channel.id])
-                )
-                if streams_response.data is not None and len(streams_response.data) > 0:
-                    channel.stream = TwitchStream(**streams_response.data[0])
-
-                channels.append(channel)
+            )
 
         self.logger.debug("Channels: %s", channels)
         self.logger.debug("User: %s", user)
@@ -118,9 +126,7 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
             async with async_timeout.timeout(30):
-                return await self.hass.async_add_executor_job(
-                    self._async_get_data_threaded
-                )
+                return await self._async_get_data()
         except TwitchAuthorizationException as err:
             raise ConfigEntryAuthFailed from err
         except (TwitchAPIException, TwitchBackendException) as err:
