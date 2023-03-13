@@ -56,20 +56,16 @@ class OAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
-        client_id = self.flow_impl.__dict__[CONF_CLIENT_ID]
-        access_token = data[CONF_TOKEN][CONF_ACCESS_TOKEN]
-        refresh_token = data[CONF_TOKEN][CONF_REFRESH_TOKEN]
-
         self._client = Twitch(
-            app_id=client_id,
+            app_id=self.flow_impl.__dict__[CONF_CLIENT_ID],
             authenticate_app=False,
         )
         self._client.auto_refresh_auth = False
 
         await self._client.set_user_authentication(
-            access_token,
+            data[CONF_TOKEN][CONF_ACCESS_TOKEN],
             OAUTH_SCOPES,
-            refresh_token=refresh_token,
+            refresh_token=data[CONF_TOKEN][CONF_REFRESH_TOKEN],
             validate=True,
         )
 
