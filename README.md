@@ -11,7 +11,7 @@ This integration is a replacement for the core integration. It implements the fo
 - Config flow with OAuth2
 - Coordinator for data updates
 - Updated TwitchAPI library
-- More to come
+- New sensors
 
 ## Installation
 
