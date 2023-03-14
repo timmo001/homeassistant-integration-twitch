@@ -150,9 +150,11 @@ async def async_setup_entry(
                     coordinator,
                     TwitchSensorEntityDescription(
                         available_fn=get_twitch_channel_available,
+                        device_class=entity_description.device_class,
                         entity_picture_fn=entity_description.entity_picture_fn,
                         key=f"{channel.id}_{entity_description.key}",
                         name=f"{channel.display_name} {entity_description.name}",
+                        state_class=entity_description.state_class,
                         value_fn=entity_description.value_fn,
                     ),
                     channel.id,
