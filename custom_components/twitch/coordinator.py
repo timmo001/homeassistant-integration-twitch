@@ -1,12 +1,15 @@
 """DataUpdateCoordinator for Twitch."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import timedelta
-import logging
 from typing import Any
 
 import async_timeout
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from twitchAPI.helper import first
 from twitchAPI.twitch import (
     FollowedChannel,
@@ -17,10 +20,6 @@ from twitchAPI.twitch import (
     TwitchResourceNotFound,
     TwitchUser,
 )
-
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_CHANNELS, DOMAIN
 from .data import TwitchChannel, TwitchCoordinatorData
