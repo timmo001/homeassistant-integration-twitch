@@ -3,9 +3,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -54,20 +59,6 @@ class TwitchSensorEntityDescription(
     """Describes Twitch issue sensor entity."""
 
 
-#     return {
-#         ATTR_TITLE: channel.stream.title if channel.stream is not None else None,
-#         ATTR_SUBSCRIPTION: bool(channel.subscription),
-#         ATTR_SUBSCRIPTION_GIFTED: channel.subscription.is_gift
-#         if channel.subscription
-#         else None,
-#         ATTR_FOLLOWERS: channel.followers,
-#         ATTR_FOLLOWING_SINCE: channel.following.followed_at
-#         if channel.following
-#         else None,
-#         ATTR_VIEWS: channel.stream.viewer_count if channel.stream is not None else None,
-#     }
-
-
 def get_twitch_game_entity_picture(
     data: TwitchCoordinatorData,
     channel_id: str,
@@ -102,10 +93,31 @@ async def async_setup_entry(
                 else None,
             ),
             TwitchSensorEntityDescription(
-                entity_picture_fn=get_twitch_game_entity_picture,
                 key="title",
                 name="title",
                 value_fn=lambda channel: channel.stream.title
+                if channel.stream is not None
+                else None,
+            ),
+            TwitchSensorEntityDescription(
+                key="followers",
+                name="followers",
+                state_class=SensorStateClass.MEASUREMENT,
+                value_fn=lambda channel: channel.followers,
+            ),
+            TwitchSensorEntityDescription(
+                key="followed_since",
+                name="followed since",
+                device_class=SensorDeviceClass.DATE,
+                value_fn=lambda channel: cast(StateType, channel.following.followed_at)
+                if channel.following
+                else None,
+            ),
+            TwitchSensorEntityDescription(
+                key="views",
+                name="views",
+                state_class=SensorStateClass.MEASUREMENT,
+                value_fn=lambda channel: channel.stream.viewer_count
                 if channel.stream is not None
                 else None,
             ),

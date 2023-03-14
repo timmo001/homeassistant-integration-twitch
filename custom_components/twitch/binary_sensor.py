@@ -72,6 +72,17 @@ async def async_setup_entry(
                     channel.id,
                     channel.display_name,
                 ),
+                TwitchBinarySensorEntity(
+                    coordinator,
+                    TwitchBinarySensorEntityDescription(
+                        available_fn=get_twitch_channel_available,
+                        key=f"{channel.id}_subscribed",
+                        name=f"{channel.display_name} subscribed",
+                        value_fn=lambda channel: channel.subscription is not None,
+                    ),
+                    channel.id,
+                    channel.display_name,
+                ),
             ]
         )
 
