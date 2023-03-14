@@ -3,9 +3,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.binary_sensor import (
+    BinarySensorEntity,
+    BinarySensorEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -21,21 +24,10 @@ from .coordinator import (
 )
 from .data import TwitchBaseEntityDescriptionMixin, TwitchCoordinatorData
 
-ATTR_GAME = "game"
-ATTR_TITLE = "title"
-ATTR_SUBSCRIPTION = "subscribed"
-ATTR_SUBSCRIPTION_GIFTED = "subscription_is_gifted"
-ATTR_FOLLOWERS = "followers"
-ATTR_FOLLOWING_SINCE = "following_since"
-ATTR_VIEWS = "views"
-
-STATE_OFFLINE = "offline"
-STATE_STREAMING = "streaming"
-
 
 @dataclass
-class TwitchBaseSensorEntityDescription(SensorEntityDescription):
-    """Describes Twitch sensor entity default overrides."""
+class TwitchBaseBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Describes Twitch binary sensor entity default overrides."""
 
     icon: str = "mdi:twitch"
     available_fn: Callable[[TwitchCoordinatorData, str], bool] = lambda data, k: True
@@ -48,8 +40,8 @@ class TwitchBaseSensorEntityDescription(SensorEntityDescription):
 
 
 @dataclass
-class TwitchSensorEntityDescription(
-    TwitchBaseSensorEntityDescription,
+class TwitchBinarySensorEntityDescription(
+    TwitchBaseBinarySensorEntityDescription,
     TwitchBaseEntityDescriptionMixin,
 ):
     """Describes Twitch issue sensor entity."""
@@ -58,31 +50,18 @@ class TwitchSensorEntityDescription(
     entity_picture_fn = get_twitch_channel_entity_picture
 
 
-#     return {
-#         ATTR_GAME: channel.stream.game_name if channel.stream is not None else None,
-#         ATTR_TITLE: channel.stream.title if channel.stream is not None else None,
-#         ATTR_SUBSCRIPTION: bool(channel.subscription),
-#         ATTR_SUBSCRIPTION_GIFTED: channel.subscription.is_gift
-#         if channel.subscription
-#         else None,
-#         ATTR_FOLLOWERS: channel.followers,
-#         ATTR_FOLLOWING_SINCE: channel.following.followed_at
-#         if channel.following
-#         else None,
-#         ATTR_VIEWS: channel.stream.viewer_count if channel.stream is not None else None,
-#     }
-
-
-def _twitch_game_value(
+def _twitch_live_value(
     data: TwitchCoordinatorData,
     channel_id: str,
 ) -> StateType:
-    """Return the value of the channel sensor."""
+    """Return the value of the sensor."""
     channel = get_twitch_channel(data, channel_id)
-    if channel is None or channel.stream is None:
+    if channel is None:
         return None
 
-    return channel.stream.game_name
+    if channel.stream is None:
+        return False
+    return True
 
 
 async def async_setup_entry(
@@ -94,17 +73,17 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]
     data: TwitchCoordinatorData = coordinator.data
 
-    entities: list[TwitchSensorEntity] = []
+    entities: list[TwitchBinarySensorEntity] = []
 
     for channel in data.channels:
         entities.extend(
             [
-                TwitchSensorEntity(
+                TwitchBinarySensorEntity(
                     coordinator,
-                    TwitchSensorEntityDescription(
-                        key=f"{channel.id}_game",
-                        name=f"{channel.display_name} game",
-                        value_fn=_twitch_game_value,
+                    TwitchBinarySensorEntityDescription(
+                        key=f"{channel.id}_live",
+                        name=f"{channel.display_name} live",
+                        value_fn=_twitch_live_value,
                     ),
                     channel.id,
                     channel.display_name,
@@ -115,17 +94,17 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class TwitchSensorEntity(TwitchDeviceEntity, SensorEntity):
-    """Define a Twitch sensor."""
+class TwitchBinarySensorEntity(TwitchDeviceEntity, BinarySensorEntity):
+    """Define a Twitch binary sensor."""
 
     _attr_has_entity_name = False
 
-    entity_description: TwitchSensorEntityDescription
+    entity_description: TwitchBinarySensorEntityDescription
 
     def __init__(
         self,
         coordinator: TwitchUpdateCoordinator,
-        description: TwitchSensorEntityDescription,
+        description: TwitchBinarySensorEntityDescription,
         service_id: str,
         service_name: str,
     ) -> None:
@@ -150,9 +129,12 @@ class TwitchSensorEntity(TwitchDeviceEntity, SensorEntity):
         )
 
     @property
-    def native_value(self) -> StateType:
+    def is_on(self) -> bool:
         """Return the state of the sensor."""
-        return self.entity_description.value_fn(self.coordinator.data, self._service_id)
+        return cast(
+            bool,
+            self.entity_description.value_fn(self.coordinator.data, self._service_id),
+        )
 
     @property
     def entity_picture(self) -> str | None:

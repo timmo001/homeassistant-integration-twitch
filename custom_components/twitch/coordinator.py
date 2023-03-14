@@ -51,6 +51,42 @@ async def get_followed_channels(
     )
 
 
+def get_twitch_channel(
+    data: TwitchCoordinatorData,
+    channel_id: str,
+) -> TwitchChannel | None:
+    """Get twitch channel from coordinator."""
+    if data.channels is None or len(data.channels) < 1:
+        return None
+    return next(
+        (channel for channel in data.channels if channel.id == channel_id),
+        None,
+    )
+
+
+def get_twitch_channel_available(
+    data: TwitchCoordinatorData,
+    channel_id: str,
+) -> bool:
+    """Return True if the channel is available."""
+    return get_twitch_channel(data, channel_id) is not None
+
+
+def get_twitch_channel_entity_picture(
+    data: TwitchCoordinatorData,
+    channel_id: str,
+) -> str | None:
+    """Return the entity picture of the sensor."""
+    channel = get_twitch_channel(data, channel_id)
+    if channel is None:
+        return None
+
+    if channel.stream is not None:
+        if channel.stream.thumbnail_url is not None:
+            return channel.stream.thumbnail_url.format(width=48, height=48)
+    return channel.profile_image_url
+
+
 class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
     """Twitch data update coordinator."""
 
