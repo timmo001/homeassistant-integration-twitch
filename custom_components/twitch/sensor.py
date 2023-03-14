@@ -115,6 +115,15 @@ async def async_setup_entry(
                 else None,
             ),
             TwitchSensorEntityDescription(
+                key="tags",
+                name="tags",
+                entity_registry_enabled_default=False,
+                entity_registry_visible_default=False,
+                value_fn=lambda channel: ",".join(channel.stream.tags)
+                if channel.stream is not None
+                else None,
+            ),
+            TwitchSensorEntityDescription(
                 key="title",
                 name="title",
                 value_fn=lambda channel: channel.stream.title
