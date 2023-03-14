@@ -1,12 +1,15 @@
 """DataUpdateCoordinator for Twitch."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import timedelta
-import logging
 from typing import Any
 
 import async_timeout
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from twitchAPI.helper import first
 from twitchAPI.twitch import (
     FollowedChannel,
@@ -17,10 +20,6 @@ from twitchAPI.twitch import (
     TwitchResourceNotFound,
     TwitchUser,
 )
-
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_CHANNELS, DOMAIN
 from .data import TwitchChannel, TwitchCoordinatorData
@@ -118,7 +117,7 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
 
         channels = []
         async for channel_user in self._client.get_users(
-            user_ids=self._options[CONF_CHANNELS],
+            user_ids=[user.id, *self._options[CONF_CHANNELS]],
         ):
             followers = await self._client.get_users_follows(
                 to_id=channel_user.id,
@@ -149,8 +148,10 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
                     id=channel_user.id,
                     display_name=channel_user.display_name,
                     profile_image_url=channel_user.profile_image_url,
-                    followers=followers.total,
-                    following=following.data[0],
+                    followers=followers.total if followers is not None else None,
+                    following=following.data[0]
+                    if following is not None and len(following.data) > 0
+                    else None,
                     game=game,
                     stream=stream,
                     subscription=subscription,
