@@ -14,6 +14,7 @@ from twitchAPI.twitch import (
     TwitchAPIException,
     TwitchAuthorizationException,
     TwitchBackendException,
+    TwitchResourceNotFound,
     TwitchUser,
 )
 
@@ -95,10 +96,14 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
                     user_id=[channel_user.id],
                 )
             )
-            subscription = await self._client.check_user_subscription(
-                broadcaster_id=channel_user.id,
-                user_id=user.id,
-            )
+            subscription = None
+            try:
+                subscription = await self._client.check_user_subscription(
+                    broadcaster_id=channel_user.id,
+                    user_id=user.id,
+                )
+            except TwitchResourceNotFound as ex:
+                self.logger.debug("User is not subscribed to this channel: %s", ex)
 
             channels.append(
                 TwitchChannel(
