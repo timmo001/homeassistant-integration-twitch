@@ -55,7 +55,6 @@ class TwitchSensorEntityDescription(
 
 
 #     return {
-#         ATTR_GAME: channel.stream.game_name if channel.stream is not None else None,
 #         ATTR_TITLE: channel.stream.title if channel.stream is not None else None,
 #         ATTR_SUBSCRIPTION: bool(channel.subscription),
 #         ATTR_SUBSCRIPTION_GIFTED: channel.subscription.is_gift
@@ -101,7 +100,15 @@ async def async_setup_entry(
                 value_fn=lambda channel: channel.stream.game_name
                 if channel.stream is not None
                 else None,
-            )
+            ),
+            TwitchSensorEntityDescription(
+                entity_picture_fn=get_twitch_game_entity_picture,
+                key="title",
+                name="title",
+                value_fn=lambda channel: channel.stream.title
+                if channel.stream is not None
+                else None,
+            ),
         ]
         for entity_description in entity_descriptions:
             entities.append(
