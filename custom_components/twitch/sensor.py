@@ -114,8 +114,8 @@ async def async_setup_entry(
                 else None,
             ),
             TwitchSensorEntityDescription(
-                key="views",
-                name="views",
+                key="viewers",
+                name="viewers",
                 state_class=SensorStateClass.MEASUREMENT,
                 value_fn=lambda channel: channel.stream.viewer_count
                 if channel.stream is not None
