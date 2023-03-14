@@ -85,18 +85,11 @@ async def async_setup_entry(
     for channel in data.channels:
         entity_descriptions: list[TwitchSensorEntityDescription] = [
             TwitchSensorEntityDescription(
-                entity_picture_fn=get_twitch_game_entity_picture,
-                key="game",
-                name="game",
-                value_fn=lambda channel: channel.stream.game_name
-                if channel.stream is not None
-                else None,
-            ),
-            TwitchSensorEntityDescription(
-                key="title",
-                name="title",
-                value_fn=lambda channel: channel.stream.title
-                if channel.stream is not None
+                key="followed_since",
+                name="followed since",
+                device_class=SensorDeviceClass.DATE,
+                value_fn=lambda channel: cast(StateType, channel.following.followed_at)
+                if channel.following
                 else None,
             ),
             TwitchSensorEntityDescription(
@@ -106,11 +99,26 @@ async def async_setup_entry(
                 value_fn=lambda channel: channel.followers,
             ),
             TwitchSensorEntityDescription(
-                key="followed_since",
-                name="followed since",
+                entity_picture_fn=get_twitch_game_entity_picture,
+                key="game",
+                name="game",
+                value_fn=lambda channel: channel.stream.game_name
+                if channel.stream is not None
+                else None,
+            ),
+            TwitchSensorEntityDescription(
+                key="started_at",
+                name="started at",
                 device_class=SensorDeviceClass.DATE,
-                value_fn=lambda channel: cast(StateType, channel.following.followed_at)
-                if channel.following
+                value_fn=lambda channel: cast(StateType, channel.stream.started_at)
+                if channel.stream is not None
+                else None,
+            ),
+            TwitchSensorEntityDescription(
+                key="title",
+                name="title",
+                value_fn=lambda channel: channel.stream.title
+                if channel.stream is not None
                 else None,
             ),
             TwitchSensorEntityDescription(
