@@ -12,7 +12,6 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import StateType
 
 from . import TwitchDeviceEntity
 from .const import DOMAIN
@@ -46,23 +45,6 @@ class TwitchBinarySensorEntityDescription(
 ):
     """Describes Twitch issue sensor entity."""
 
-    available_fn = get_twitch_channel_available
-    entity_picture_fn = get_twitch_channel_entity_picture
-
-
-def _twitch_live_value(
-    data: TwitchCoordinatorData,
-    channel_id: str,
-) -> StateType:
-    """Return the value of the sensor."""
-    channel = get_twitch_channel(data, channel_id)
-    if channel is None:
-        return None
-
-    if channel.stream is None:
-        return False
-    return True
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -81,9 +63,11 @@ async def async_setup_entry(
                 TwitchBinarySensorEntity(
                     coordinator,
                     TwitchBinarySensorEntityDescription(
+                        available_fn=get_twitch_channel_available,
+                        entity_picture_fn=get_twitch_channel_entity_picture,
                         key=f"{channel.id}_live",
                         name=f"{channel.display_name} live",
-                        value_fn=_twitch_live_value,
+                        value_fn=lambda channel: channel.stream is not None,
                     ),
                     channel.id,
                     channel.display_name,
@@ -131,10 +115,10 @@ class TwitchBinarySensorEntity(TwitchDeviceEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return the state of the sensor."""
-        return cast(
-            bool,
-            self.entity_description.value_fn(self.coordinator.data, self._service_id),
-        )
+        channel = get_twitch_channel(self.coordinator.data, self._service_id)
+        if channel is None:
+            return False
+        return cast(bool, self.entity_description.value_fn(channel))
 
     @property
     def entity_picture(self) -> str | None:

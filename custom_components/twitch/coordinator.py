@@ -1,15 +1,12 @@
 """DataUpdateCoordinator for Twitch."""
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from datetime import timedelta
+import logging
 from typing import Any
 
 import async_timeout
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from twitchAPI.helper import first
 from twitchAPI.twitch import (
     FollowedChannel,
@@ -20,6 +17,10 @@ from twitchAPI.twitch import (
     TwitchResourceNotFound,
     TwitchUser,
 )
+
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_CHANNELS, DOMAIN
 from .data import TwitchChannel, TwitchCoordinatorData
@@ -76,14 +77,14 @@ def get_twitch_channel_entity_picture(
     data: TwitchCoordinatorData,
     channel_id: str,
 ) -> str | None:
-    """Return the entity picture of the sensor."""
+    """Return the entity picture of the channel."""
     channel = get_twitch_channel(data, channel_id)
     if channel is None:
         return None
 
     if channel.stream is not None:
         if channel.stream.thumbnail_url is not None:
-            return channel.stream.thumbnail_url.format(width=48, height=48)
+            return channel.stream.thumbnail_url.format(width=1280, height=720)
     return channel.profile_image_url
 
 
@@ -131,6 +132,9 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
                     user_id=[channel_user.id],
                 )
             )
+            game = None
+            if stream is not None:
+                game = await first(self._client.get_games(game_ids=[stream.game_id]))
             subscription = None
             try:
                 subscription = await self._client.check_user_subscription(
@@ -147,6 +151,7 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
                     profile_image_url=channel_user.profile_image_url,
                     followers=followers.total,
                     following=following.data[0],
+                    game=game,
                     stream=stream,
                     subscription=subscription,
                 )

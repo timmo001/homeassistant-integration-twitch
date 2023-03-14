@@ -17,7 +17,6 @@ from .coordinator import (
     TwitchUpdateCoordinator,
     get_twitch_channel,
     get_twitch_channel_available,
-    get_twitch_channel_entity_picture,
 )
 from .data import TwitchBaseEntityDescriptionMixin, TwitchCoordinatorData
 
@@ -54,9 +53,6 @@ class TwitchSensorEntityDescription(
 ):
     """Describes Twitch issue sensor entity."""
 
-    available_fn = get_twitch_channel_available
-    entity_picture_fn = get_twitch_channel_entity_picture
-
 
 #     return {
 #         ATTR_GAME: channel.stream.game_name if channel.stream is not None else None,
@@ -73,16 +69,16 @@ class TwitchSensorEntityDescription(
 #     }
 
 
-def _twitch_game_value(
+def get_twitch_game_entity_picture(
     data: TwitchCoordinatorData,
     channel_id: str,
-) -> StateType:
-    """Return the value of the channel sensor."""
+) -> str | None:
+    """Return the entity picture of the game."""
     channel = get_twitch_channel(data, channel_id)
-    if channel is None or channel.stream is None:
+    if channel is None or channel.game is None:
         return None
 
-    return channel.stream.game_name
+    return channel.game.box_art_url.format(width=300, height=400)
 
 
 async def async_setup_entry(
@@ -97,20 +93,31 @@ async def async_setup_entry(
     entities: list[TwitchSensorEntity] = []
 
     for channel in data.channels:
-        entities.extend(
-            [
+        entity_descriptions: list[TwitchSensorEntityDescription] = [
+            TwitchSensorEntityDescription(
+                entity_picture_fn=get_twitch_game_entity_picture,
+                key="game",
+                name="game",
+                value_fn=lambda channel: channel.stream.game_name
+                if channel.stream is not None
+                else None,
+            )
+        ]
+        for entity_description in entity_descriptions:
+            entities.append(
                 TwitchSensorEntity(
                     coordinator,
                     TwitchSensorEntityDescription(
-                        key=f"{channel.id}_game",
-                        name=f"{channel.display_name} game",
-                        value_fn=_twitch_game_value,
+                        available_fn=get_twitch_channel_available,
+                        entity_picture_fn=entity_description.entity_picture_fn,
+                        key=f"{channel.id}_{entity_description.key}",
+                        name=f"{channel.display_name} {entity_description.name}",
+                        value_fn=entity_description.value_fn,
                     ),
                     channel.id,
                     channel.display_name,
                 ),
-            ]
-        )
+            )
 
     async_add_entities(entities)
 
@@ -152,11 +159,17 @@ class TwitchSensorEntity(TwitchDeviceEntity, SensorEntity):
     @property
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
-        return self.entity_description.value_fn(self.coordinator.data, self._service_id)
+        channel = get_twitch_channel(self.coordinator.data, self._service_id)
+        if channel is None:
+            return False
+        return self.entity_description.value_fn(channel)
 
     @property
     def entity_picture(self) -> str | None:
         """Return the entity picture."""
+        if self.entity_description.entity_picture_fn is None:
+            return None
+
         return self.entity_description.entity_picture_fn(
             self.coordinator.data, self._service_id
         )
