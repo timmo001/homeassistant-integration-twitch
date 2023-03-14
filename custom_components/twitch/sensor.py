@@ -25,17 +25,6 @@ from .coordinator import (
 )
 from .data import TwitchBaseEntityDescriptionMixin, TwitchCoordinatorData
 
-ATTR_GAME = "game"
-ATTR_TITLE = "title"
-ATTR_SUBSCRIPTION = "subscribed"
-ATTR_SUBSCRIPTION_GIFTED = "subscription_is_gifted"
-ATTR_FOLLOWERS = "followers"
-ATTR_FOLLOWING_SINCE = "following_since"
-ATTR_VIEWS = "views"
-
-STATE_OFFLINE = "offline"
-STATE_STREAMING = "streaming"
-
 
 @dataclass
 class TwitchBaseSensorEntityDescription(SensorEntityDescription):
