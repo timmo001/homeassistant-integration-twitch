@@ -1,12 +1,19 @@
 """Config flow for Twitch."""
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
+import logging
 from typing import Any
 
-import homeassistant.helpers.config_validation as cv
+from twitchAPI.twitch import (
+    Twitch,
+    TwitchAPIException,
+    TwitchAuthorizationException,
+    TwitchBackendException,
+    TwitchUser,
+)
 import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_TOKEN
 from homeassistant.core import callback
@@ -15,13 +22,7 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
     AbstractOAuth2FlowHandler,
     async_get_config_entry_implementation,
 )
-from twitchAPI.twitch import (
-    Twitch,
-    TwitchAPIException,
-    TwitchAuthorizationException,
-    TwitchBackendException,
-    TwitchUser,
-)
+import homeassistant.helpers.config_validation as cv
 
 from .const import CONF_CHANNELS, CONF_REFRESH_TOKEN, DOMAIN, OAUTH_SCOPES
 from .coordinator import get_followed_channels, get_user
@@ -56,16 +57,20 @@ class OAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
+        client_id = self.flow_impl.__dict__[CONF_CLIENT_ID]
+        access_token = data[CONF_TOKEN][CONF_ACCESS_TOKEN]
+        refresh_token = data[CONF_TOKEN][CONF_REFRESH_TOKEN]
+
         self._client = Twitch(
-            app_id=self.flow_impl.__dict__[CONF_CLIENT_ID],
+            app_id=client_id,
             authenticate_app=False,
         )
         self._client.auto_refresh_auth = False
 
         await self._client.set_user_authentication(
-            data[CONF_TOKEN][CONF_ACCESS_TOKEN],
+            access_token,
             OAUTH_SCOPES,
-            refresh_token=data[CONF_TOKEN][CONF_REFRESH_TOKEN],
+            refresh_token=refresh_token,
             validate=True,
         )
 

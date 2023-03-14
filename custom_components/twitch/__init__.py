@@ -3,6 +3,14 @@ from __future__ import annotations
 
 import logging
 
+from twitchAPI.twitch import Twitch
+from twitchAPI.types import (
+    MissingScopeException,
+    TwitchAPIException,
+    TwitchAuthorizationException,
+    TwitchBackendException,
+)
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant, callback
@@ -15,20 +23,16 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from twitchAPI.twitch import Twitch
-from twitchAPI.types import (
-    MissingScopeException,
-    TwitchAPIException,
-    TwitchAuthorizationException,
-    TwitchBackendException,
-)
 
 from .const import CONF_CHANNELS, CONF_REFRESH_TOKEN, DOMAIN, OAUTH_SCOPES
 from .coordinator import TwitchUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+]
 
 
 async def async_setup_entry(

@@ -1,9 +1,12 @@
 """Data ckasses for Twitch."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from twitchAPI.twitch import Stream, TwitchUser, TwitchUserFollow, UserSubscription
+
+from homeassistant.helpers.typing import StateType
 
 
 @dataclass
@@ -25,3 +28,10 @@ class TwitchCoordinatorData:
 
     channels: list[TwitchChannel]
     user: TwitchUser
+
+
+@dataclass
+class TwitchBaseEntityDescriptionMixin:
+    """Mixin for required Twitch base description keys."""
+
+    value_fn: Callable[[TwitchCoordinatorData, str], StateType]
