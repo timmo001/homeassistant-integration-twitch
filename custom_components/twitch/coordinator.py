@@ -175,5 +175,5 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
                 return await self._async_get_data()
         except TwitchAuthorizationException as err:
             raise ConfigEntryAuthFailed from err
-        except (TwitchAPIException, TwitchBackendException) as err:
+        except (TwitchAPIException, TwitchBackendException, KeyError) as err:
             raise UpdateFailed from err
