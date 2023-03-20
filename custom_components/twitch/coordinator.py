@@ -1,6 +1,7 @@
 """DataUpdateCoordinator for Twitch."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from datetime import timedelta
@@ -109,57 +110,72 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
         self._client = client
         self._options = options
 
+    async def _async_get_channel_data(
+        self,
+        channel_user: TwitchUser,
+        user: TwitchUser,
+    ) -> TwitchChannel:
+        followers, following, stream = await asyncio.gather(
+            self._client.get_users_follows(
+                to_id=channel_user.id,
+            ),
+            self._client.get_users_follows(
+                from_id=user.id,
+                to_id=channel_user.id,
+            ),
+            first(
+                self._client.get_streams(
+                    user_id=[channel_user.id],
+                )
+            ),
+        )
+        game = None
+        if stream is not None:
+            game = await first(self._client.get_games(game_ids=[stream.game_id]))
+        subscription = None
+        try:
+            subscription = await self._client.check_user_subscription(
+                broadcaster_id=channel_user.id,
+                user_id=user.id,
+            )
+        except TwitchResourceNotFound as ex:
+            self.logger.debug("User is not subscribed to this channel: %s", ex)
+
+        return TwitchChannel(
+            id=channel_user.id,
+            display_name=channel_user.display_name,
+            profile_image_url=channel_user.profile_image_url,
+            followers=followers.total if followers is not None else None,
+            following=following.data[0]
+            if following is not None and len(following.data) > 0
+            else None,
+            game=game,
+            stream=stream,
+            subscription=subscription,
+        )
+
     async def _async_get_data(self) -> TwitchCoordinatorData:
         """Return data from the coordinator."""
         user = await get_user(self._client)
         if user is None:
             raise UpdateFailed("Cannot get user from Twitch API")
 
-        channels = []
+        self.logger.debug("User: %s", user)
+
+        channel_users = []
         async for channel_user in self._client.get_users(
             user_ids=[user.id, *self._options[CONF_CHANNELS]],
         ):
-            followers = await self._client.get_users_follows(
-                to_id=channel_user.id,
-            )
-            following = await self._client.get_users_follows(
-                from_id=user.id,
-                to_id=channel_user.id,
-            )
-            stream = await first(
-                self._client.get_streams(
-                    user_id=[channel_user.id],
-                )
-            )
-            game = None
-            if stream is not None:
-                game = await first(self._client.get_games(game_ids=[stream.game_id]))
-            subscription = None
-            try:
-                subscription = await self._client.check_user_subscription(
-                    broadcaster_id=channel_user.id,
-                    user_id=user.id,
-                )
-            except TwitchResourceNotFound as ex:
-                self.logger.debug("User is not subscribed to this channel: %s", ex)
+            channel_users.append(channel_user)
 
-            channels.append(
-                TwitchChannel(
-                    id=channel_user.id,
-                    display_name=channel_user.display_name,
-                    profile_image_url=channel_user.profile_image_url,
-                    followers=followers.total if followers is not None else None,
-                    following=following.data[0]
-                    if following is not None and len(following.data) > 0
-                    else None,
-                    game=game,
-                    stream=stream,
-                    subscription=subscription,
-                )
-            )
+        channels = await asyncio.gather(
+            *[
+                self._async_get_channel_data(channel_user, user)
+                for channel_user in channel_users
+            ]
+        )
 
         self.logger.debug("Channels: %s", channels)
-        self.logger.debug("User: %s", user)
 
         return TwitchCoordinatorData(
             channels=channels,
@@ -171,7 +187,7 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
         try:
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
-            async with async_timeout.timeout(30):
+            async with async_timeout.timeout(60):
                 return await self._async_get_data()
         except TwitchAuthorizationException as err:
             raise ConfigEntryAuthFailed from err
