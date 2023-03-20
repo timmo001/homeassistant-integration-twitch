@@ -187,7 +187,7 @@ class TwitchUpdateCoordinator(DataUpdateCoordinator[TwitchCoordinatorData]):
         try:
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
-            async with async_timeout.timeout(60):
+            async with async_timeout.timeout(30):
                 return await self._async_get_data()
         except TwitchAuthorizationException as err:
             raise ConfigEntryAuthFailed from err
